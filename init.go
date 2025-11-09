@@ -17,8 +17,8 @@ var keys = keyMap{
 		key.WithHelp("enter", "Access file or dir"),
 	),
 	Back: key.NewBinding(
-		key.WithKeys("backspace", "left"),
-		key.WithHelp("← / backspace", "go up directory"),
+		key.WithKeys("left"),
+		key.WithHelp("←", "go up directory"),
 	),
 	Quit: key.NewBinding(
 		key.WithKeys("ctrl+c", "q"),

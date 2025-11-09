@@ -15,7 +15,7 @@ import (
 )
 
 var docStyle = lipgloss.NewStyle().
-	Border(lipgloss.NormalBorder()).
+	Border(lipgloss.RoundedBorder(), true).
 	BorderForeground(lipgloss.Color("63")).
 	Padding(1, 2)
 
@@ -25,23 +25,32 @@ type item struct {
 	isDir bool
 }
 
+
 func (i item) Title() string       { return i.title }
 func (i item) Description() string { return i.desc }
 func (i item) FilterValue() string { return i.title }
 
 type Model struct {
-	List     list.Model
-	CurrPath string
-	Width    int
-	Height   int
-	Hidden   bool
+	List         list.Model
+	CurrPath     string
+	Width        int
+	Height       int
+	Hidden       bool
+	ShortcutModal ShortcutModal 
 }
 
 func NewModel(l list.Model, path string) Model {
+	shortcutItems := []list.Item{
+		item{title: "Documents", desc: "📁", isDir: true, path: "/Users/lou/Documents"},
+		item{title: "Desktop", desc: "📁", isDir: true, path: "/Users/lou/Desktop"},
+		item{title: "EPL", desc: "📁", isDir: true, path: "/Users/lou/EPL"},
+		item{title: "Cancel", desc: "", isDir: false, path: ""},
+	}
 	return Model{
-		List:     l,
-		CurrPath: path,
-		Hidden:   true,
+		List:         l,
+		CurrPath:     path,
+		Hidden:       true,
+		ShortcutModal: NewShortcutModal(shortcutItems, 30, 10),
 	}
 }
 
@@ -91,7 +100,7 @@ var Keys = struct {
 	Hide  key.Binding
 }{
 	Enter: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "Access file or dir")),
-	Back:  key.NewBinding(key.WithKeys("backspace", "left"), key.WithHelp("← / backspace", "go up directory")),
+	Back:  key.NewBinding(key.WithKeys( "left"), key.WithHelp("←", "go up directory")),
 	Quit:  key.NewBinding(key.WithKeys("ctrl+c", "q"), key.WithHelp("q", "quit")),
 	Right: key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "open directory")),
 	Hide:  key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "toggle hidden files")),
@@ -102,6 +111,29 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.ShortcutModal.Active {
+		var cmd tea.Cmd
+		m.ShortcutModal, cmd = m.ShortcutModal.Update(msg)
+
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "esc":
+				m.ShortcutModal.Active = false
+			case "enter":
+				if selected, ok := m.ShortcutModal.List.SelectedItem().(item); ok {
+					if selected.title == "Cancel" {
+						m.ShortcutModal.Active = false
+					} else if selected.path != "" {
+						m.CurrPath = selected.path
+						m.ReloadDir()
+						m.ShortcutModal.Active = false
+					}
+				}
+			}
+		}
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch {
@@ -134,6 +166,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, Keys.Hide):
 			m.Hidden = !m.Hidden
 			m.ReloadDir()
+
+		case msg.String() == "s": // Show modal on 's' key
+			m.ShortcutModal.Active = true
+			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
@@ -149,5 +185,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	return docStyle.Width(m.Width).Height(m.Height).Render(m.List.View())
+    mainView := docStyle.Width(m.Width).Height(m.Height).Render(m.List.View())
+    if m.ShortcutModal.Active {
+        modal := m.ShortcutModal.View()
+        centeredModal := lipgloss.Place(
+            m.Width, m.Height,
+            lipgloss.Center, lipgloss.Center,
+            modal,
+        )
+        return mainView + "\n" + centeredModal
+    }
+    return mainView
 }
